@@ -4,6 +4,7 @@
 ///
 
 #include "queue/link_list_queue.hpp"
+#include "queue/link_list_queue_v2.hpp"
 
 #include <chrono>
 #include <iostream>
@@ -38,10 +39,79 @@ void sync_io(Func f)
     f();
 }
 
+class QueueTest
+{
+public:
+    QueueTest()
+    {
+        head_ = new Node;
+        tail_ = head_;
+    }
+
+    ~QueueTest()
+    {
+        auto *h = head_;
+        while (h) {
+            auto tmp = h;
+            h = h->next;
+            delete tmp;
+        }
+    }
+
+    void enqueue(const Task &t)
+    {
+        auto *node = new Node(t);
+        tail_->next = node;
+        tail_ = node;
+    }
+
+private:
+    struct Node
+    {
+        Node *next = nullptr;
+        std::optional<Task> task{};
+
+        Node() = default;
+
+        explicit Node(const Task &t) : task(std::in_place, t) { }
+    };
+
+    Node *head_;
+    Node *tail_;
+};
+
+static void produce_single(std::atomic_flag &barrier)
+{
+    auto tid = std::this_thread::get_id();
+    QueueTest qt;
+
+    sync_io([&tid] { std::cout << "Thread [" << tid << "] waiting..." << std::endl; });
+    barrier.wait(false);
+    std::cout << "Thread [" << tid << "] begin to run..." << std::endl;
+
+    auto begin = get_current_time();
+
+    Task task{};
+    task.tid = (int64_t)*(std::thread::native_handle_type *)(&tid);     // hack
+    task.out_time = 0;
+    task.consume_tid = 0;
+    for (int64_t i = 0; i < LoopCount; ++i) {
+        task.task_id = i;
+        task.in_time = get_current_time();
+//        task_queue.enqueue(task);
+        qt.enqueue(task);
+    }
+
+    auto end = get_current_time();
+    auto elapsed = end - begin;
+    sync_io([&tid, elapsed] {
+        std::cout << "Thread [" << tid << "] finished. [Single] total time: " << elapsed << "ns" << std::endl;
+    });
+}
+
 static void produce(sc::LinkListQueue<Task> &task_queue, std::atomic_flag &barrier)
 {
     auto tid = std::this_thread::get_id();
-
 
     sync_io([&tid] { std::cout << "Thread [" << tid << "] waiting..." << std::endl; });
     barrier.wait(false);
@@ -112,6 +182,8 @@ int main(int argc, char **argv)
     result[0].reserve(total / 4 * 3);
     result[1].reserve(total / 4 * 3);
 
+    std::thread single_queue(produce_single, std::ref(barrier));
+
     std::vector<std::thread> produce_threads;
     produce_threads.reserve(4);
     for (int i = 0; i < 4; ++i) {
@@ -119,7 +191,7 @@ int main(int argc, char **argv)
     }
     std::vector<std::thread> consume_threads;
     consume_threads.reserve(2);
-    for (int i = 0; i < 1; ++i) {
+    for (int i = 0; i < 2; ++i) {
         consume_threads.emplace_back(
                 consume, std::ref(task_queue), std::ref(barrier),
                 std::ref(result[i]), std::ref(counter), total);
@@ -130,6 +202,7 @@ int main(int argc, char **argv)
     barrier.test_and_set();
     barrier.notify_all();
 
+    single_queue.join();
     for (auto &t: produce_threads) {
         t.join();
     }
