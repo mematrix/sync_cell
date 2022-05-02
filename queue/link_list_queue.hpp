@@ -40,7 +40,6 @@ class LinkListQueue
 public:
     using value_type = T;
     using allocator_type = typename AllocTrait::allocator_type;
-    using size_type = typename AllocTrait::size_type;
     using reference = value_type &;
     using const_reference = const value_type &;
 
@@ -167,9 +166,9 @@ private:
     }
 
     // dequeue direction
-    CachePadded<std::atomic<VersionPtr>> head_;
+    util::CachePadded<std::atomic<VersionPtr>> head_;
     // enqueue direction
-    CachePadded<std::atomic<Node *>> tail_;
+    util::CachePadded<std::atomic<Node *>> tail_;
 
     // allocator
     allocator_type allocator_;

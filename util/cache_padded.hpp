@@ -26,6 +26,8 @@ constexpr std::size_t hardware_destructive_interference_size = 64;
 
 }
 
+namespace util {
+
 template<typename T>
 class alignas(impl::hardware_destructive_interference_size) CachePadded
 {
@@ -136,6 +138,8 @@ public:
 private:
     value_type value_;
 };
+
+}
 
 }
 
