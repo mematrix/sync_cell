@@ -1,6 +1,7 @@
 ///
 /// @file  cache_padded.hpp
-/// @brief Pads and aligns a value to the length of a cache line.
+/// @brief Pads and aligns a value to the length of a cache line. Inspired by crossbeam-rs:
+/// [https://github.com/crossbeam-rs/crossbeam/blob/master/crossbeam-utils/src/cache_padded.rs](CachePadded)
 ///
 
 #ifndef SYNC_CELL_CACHE_PADDED_HPP
