@@ -51,6 +51,10 @@ public:
         tail_->store(p);
     }
 
+    LinkListQueue(const LinkListQueue &) = delete;
+
+    LinkListQueue &operator=(const LinkListQueue &) = delete;
+
     ~LinkListQueue()
     {
         auto *tail = tail_->load(std::memory_order_acquire);

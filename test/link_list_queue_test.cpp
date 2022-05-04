@@ -5,6 +5,7 @@
 
 #include "queue/link_list_queue.hpp"
 #include "queue/link_list_queue_v2.hpp"
+#include "queue/block_list_queue.hpp"
 
 #include <chrono>
 #include <iostream>
