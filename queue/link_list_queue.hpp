@@ -13,6 +13,7 @@
 
 #include "shared/link_list_node.hpp"
 #include "util/cache_padded.hpp"
+#include "util/copy_move_selector.hpp"
 
 
 namespace sc {
@@ -116,7 +117,7 @@ public:
             return {};
         }
 
-        std::optional<value_type> ret(std::move(next->value));
+        std::optional<value_type> ret(util::cast_ctor_ref(next->value));
         release_node(ptr.ptr);
         return ret;
     }

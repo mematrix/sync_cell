@@ -86,9 +86,9 @@ static void produce_single(std::atomic_flag &barrier)
     auto tid = std::this_thread::get_id();
     QueueTest qt;
 
-    sync_io([&tid] { std::cout << "Thread [" << tid << "] waiting..." << std::endl; });
+    sync_io([&tid] { std::cout << "[Single] Thread [" << tid << "] waiting..." << std::endl; });
     barrier.wait(false);
-    std::cout << "Thread [" << tid << "] begin to run..." << std::endl;
+    std::cout << tid << std::endl;
 
     auto begin = get_current_time();
 
@@ -106,17 +106,19 @@ static void produce_single(std::atomic_flag &barrier)
     auto end = get_current_time();
     auto elapsed = end - begin;
     sync_io([&tid, elapsed] {
-        std::cout << "Thread [" << tid << "] finished. [Single] total time: " << elapsed << "ns" << std::endl;
+        std::cout << "[Single] Thread [" << tid << "] finished. total time: " <<
+                  elapsed << "ns" << std::endl;
     });
 }
 
-static void produce(sc::LinkListQueue<Task> &task_queue, std::atomic_flag &barrier)
+template<typename Queue, const char *TAG>
+static void produce(Queue &task_queue, std::atomic_flag &barrier)
 {
     auto tid = std::this_thread::get_id();
 
-    sync_io([&tid] { std::cout << "Thread [" << tid << "] waiting..." << std::endl; });
+    sync_io([&tid] { std::cout << '[' << TAG << "] Thread [" << tid << "] waiting..." << std::endl; });
     barrier.wait(false);
-    std::cout << "Thread [" << tid << "] begin to produce..." << std::endl;
+    std::cout << tid << std::endl;
 
     auto begin = get_current_time();
 
@@ -133,12 +135,14 @@ static void produce(sc::LinkListQueue<Task> &task_queue, std::atomic_flag &barri
     auto end = get_current_time();
     auto elapsed = end - begin;
     sync_io([&tid, elapsed] {
-        std::cout << "Thread [" << tid << "] finished. total time: " << elapsed << "ns" << std::endl;
+        std::cout << '[' << TAG << "] Thread [" << tid << "] finished. total time: " <<
+                  elapsed << "ns" << std::endl;
     });
 }
 
+template<typename Queue, const char *TAG>
 static void consume(
-        sc::LinkListQueue<Task> &task_queue,
+        Queue &task_queue,
         std::atomic_flag &barrier,
         std::vector<Task> &result,
         std::atomic<uint64_t> &counter,
@@ -146,9 +150,9 @@ static void consume(
 {
     auto tid = std::this_thread::get_id();
 
-    sync_io([&tid] { std::cout << "Thread [" << tid << "] waiting..." << std::endl; });
+    sync_io([&tid] { std::cout << '[' << TAG << "] Thread [" << tid << "] waiting..." << std::endl; });
     barrier.wait(false);
-    std::cout << "Thread [" << tid << "] begin to consume..." << std::endl;
+    std::cout << tid << std::endl;
 
     auto begin = get_current_time();
 
@@ -166,36 +170,66 @@ static void consume(
     auto end = get_current_time();
     auto elapsed = end - begin;
     sync_io([&tid, elapsed] {
-        std::cout << "Thread [" << tid << "] finished. total time: " << elapsed << "ns" << std::endl;
+        std::cout << '[' << TAG << "] Consumer Thread [" << tid << "] finished. total time: "
+                  << elapsed << "ns" << std::endl;
     });
 }
+
+static const char LinkListTag[] = "L/MPSC";
+static const char BlockListTag[] = "B/MPMC";
 
 int main(int argc, char **argv)
 {
     sc::LinkListQueue<Task> task_queue;
     std::atomic_flag barrier = ATOMIC_FLAG_INIT;
 
-    std::cout << "Queue is lock free: " << std::boolalpha << task_queue.is_lock_free() << std::endl;
+    std::cout << "Queue is lock free: " << std::boolalpha <<
+              task_queue.is_lock_free() << std::endl;
 
-    std::atomic<uint64_t> counter(0);
     uint64_t total = 4 * LoopCount;
-    std::vector<std::vector<Task>> result(2);
-    result[0].reserve(total / 4 * 3);
-    result[1].reserve(total / 4 * 3);
 
     std::thread single_queue(produce_single, std::ref(barrier));
 
     std::vector<std::thread> produce_threads;
     produce_threads.reserve(4);
     for (int i = 0; i < 4; ++i) {
-        produce_threads.emplace_back(produce, std::ref(task_queue), std::ref(barrier));
+        produce_threads.emplace_back(
+                produce<sc::LinkListQueue<Task>, LinkListTag>,
+                std::ref(task_queue), std::ref(barrier));
     }
     std::vector<std::thread> consume_threads;
     consume_threads.reserve(2);
+    std::vector<std::vector<Task>> result(2);
+    result[0].reserve(total / 4 * 3);
+    result[1].reserve(total / 4 * 3);
+    std::atomic<uint64_t> counter(0);
     for (int i = 0; i < 2; ++i) {
         consume_threads.emplace_back(
-                consume, std::ref(task_queue), std::ref(barrier),
+                consume<sc::LinkListQueue<Task>, LinkListTag>,
+                std::ref(task_queue), std::ref(barrier),
                 std::ref(result[i]), std::ref(counter), total);
+    }
+
+    sc::mpmc::BlockListQueue<Task> mpmc_queue;
+
+    std::vector<std::thread> mpmc_produce_threads;
+    mpmc_produce_threads.reserve(4);
+    for (int i = 0; i < 4; ++i) {
+        mpmc_produce_threads.emplace_back(
+                produce<sc::mpmc::BlockListQueue<Task>, BlockListTag>,
+                std::ref(mpmc_queue), std::ref(barrier));
+    }
+    std::vector<std::thread> mpmc_consumer_threads;
+    mpmc_consumer_threads.reserve(2);
+    std::vector<std::vector<Task>> mpmc_result(2);
+    mpmc_result[0].reserve(total / 4 * 3);
+    mpmc_result[1].reserve(total / 4 * 3);
+    std::atomic<uint64_t> mpmc_counter(0);
+    for (int i = 0; i < 2; ++i) {
+        mpmc_consumer_threads.emplace_back(
+                consume<sc::mpmc::BlockListQueue<Task>, BlockListTag>,
+                std::ref(mpmc_queue), std::ref(barrier),
+                std::ref(mpmc_result[i]), std::ref(mpmc_counter), total);
     }
 
     std::this_thread::sleep_for(std::chrono::seconds(2));
@@ -210,9 +244,17 @@ int main(int argc, char **argv)
     for (auto &t: consume_threads) {
         t.join();
     }
+    for (auto &t: mpmc_produce_threads) {
+        t.join();
+    }
+    for (auto &t: mpmc_consumer_threads) {
+        t.join();
+    }
 
     std::cout << "Result1.count = " << result[0].size() << std::endl;
     std::cout << "Result2.count = " << result[1].size() << std::endl;
+    std::cout << "[MPMC] Result1.count = " << mpmc_result[0].size() << std::endl;
+    std::cout << "[MPMC] Result2.count = " << mpmc_result[1].size() << std::endl;
 
     std::cout << "hello world" << std::endl;
 

@@ -13,6 +13,7 @@
 
 #include "util/back_off.hpp"
 #include "util/cache_padded.hpp"
+#include "util/copy_move_selector.hpp"
 
 
 namespace sc::mpmc {
@@ -176,10 +177,12 @@ class BlockListQueue
         }
     };
 
+    using PoolBlockPtr = std::unique_ptr<Block, PoolBlockDeleter<>>;
+
     /// @brief Creates an empty block managed by a @c std::unique_ptr, which will auto release
     /// the new block to the 'pool' if the block does not been added to the linked list.
     /// @param pool A @c Block object cache pool.
-    static std::unique_ptr<Block, PoolBlockDeleter<>> new_block(BlockCachePool<> &pool)
+    static PoolBlockPtr new_block(BlockCachePool<> &pool)
     {
         auto *b = pool.alloc();
         return {b, {&pool}};
@@ -249,11 +252,139 @@ public:
         });
     }
 
+    /// @brief Try dequeue an item from the queue.
+    /// @return If success, the optional takes the dequeue value, otherwise the optional is empty.
+    std::optional<value_type> try_dequeue()
+    {
+        util::Backoff backoff;
+        size_t head;
+        Block *block;
+        size_t offset;
+
+        while (true) {
+            head = (*head_).index.load(std::memory_order_acquire);
+            block = (*head_).block.load(std::memory_order_acquire);
+
+            // Calculate the offset of the index into the block.
+            offset = (head >> Shift) % Lap;
+
+            // If we reached the end of the block
+            if (offset == BlockCap) {
+                backoff.snooze();
+            } else {
+                break;
+            }
+        }
+
+        auto new_head = head + (1u << Shift);
+        if ((new_head & HasNext) == 0) {
+            std::atomic_thread_fence(std::memory_order_seq_cst);
+            auto tail = (*tail_).index.load(std::memory_order_relaxed);
+
+            // If the tail equals the head, that means the queue is empty.
+            if ((head >> Shift) == (tail >> Shift)) {
+                return {};
+            }
+
+            // If head and tail are not in the same block, set 'HasNext' in head.
+            if ((head >> Shift) / Lap != (tail >> Shift) / Lap) {
+                new_head |= HasNext;
+            }
+        }
+
+        // Try moving the head index forward.
+        if (!(*head_).index.compare_exchange_weak(
+                head, new_head,
+                std::memory_order_seq_cst,
+                std::memory_order_relaxed)) {
+            return {};
+        }
+
+        // If we've reached the end of the block, move to the next one.
+        if (offset + 1 == BlockCap) {
+            auto next = block->wait_next();
+            auto next_index = (new_head & ~HasNext) + (1u << Shift);
+            if (next->next.load(std::memory_order_relaxed) != nullptr) {
+                next_index |= HasNext;
+            }
+
+            (*head_).block.store(next, std::memory_order_release);
+            (*head_).index.store(next_index, std::memory_order_release);
+        }
+
+        // Read the slot
+        auto &slot = block->slots[offset];
+        slot.wait_write();
+        std::optional<value_type> ret(util::cast_ctor_ref(slot.value));
+
+        // Destroy the block if we've reached the end, or if another thread wanted to destroy
+        // but couldn't because we were busy reading from the slot.
+        if ((offset + 1 == BlockCap) ||
+            ((slot.state.fetch_or(Read, std::memory_order_acq_rel) & Destroy) != 0)) {
+            destroy_block(block, offset, pool_);
+        }
+
+        return ret;
+    }
+
 private:
     template<typename Func>
     void enqueue_value(Func value_set)
     {
-        //
+        util::Backoff backoff;
+        auto tail = (*tail_).index.load(std::memory_order_acquire);
+        auto *block = (*tail_).block.load(std::memory_order_acquire);
+        PoolBlockPtr next_block;
+
+        while (true) {
+            // Calculate the offset of the index into the block.
+            auto offset = (tail >> Shift) % Lap;
+            // If we reached the end of the block, wait until the next one is installed.
+            // Note that because offset is equal to the 'BlockCap', so there must be a
+            // thread whose offset is equal to the 'BlockCap - 1', and that thread will
+            // set the next block.
+            if (offset == BlockCap) {
+                backoff.snooze();
+                tail = (*tail_).index.load(std::memory_order_acquire);
+                block = (*tail_).block.load(std::memory_order_acquire);
+                continue;
+            }
+
+            // If we're going to have to install the next block, allocate it in advance
+            // in order to make the wait for other threads as short as possible.
+            if (offset + 1 == BlockCap && !next_block) {
+                next_block = new_block(pool_);
+            }
+
+            auto new_tail = tail + (1u << Shift);
+
+            // Try advancing the tail forward.
+            if ((*tail_).index.compare_exchange_weak(
+                    tail, new_tail,
+                    std::memory_order_seq_cst,
+                    std::memory_order_acquire)) {
+                // If we've reached the end of the block, install the next one.
+                if (offset + 1 == BlockCap) {
+                    // this progress is excluded.
+                    auto *b = next_block.release();
+                    auto next_index = new_tail + (1u << Shift);
+
+                    (*tail_).block.store(b, std::memory_order_release);
+                    (*tail_).index.store(next_index, std::memory_order_release);
+                    block->next.store(b, std::memory_order_release);
+                }
+
+                // Write the task into the slot.
+                auto &slot = block->slots[offset];
+                value_set(slot.value);
+                slot.state.fetch_or(Write, std::memory_order_release);
+
+                return;
+            } else {
+                block = (*tail_).block.load(std::memory_order_acquire);
+                backoff.spin();
+            }
+        }
     }
 
     /// @brief The head of the queue.
