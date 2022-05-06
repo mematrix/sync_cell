@@ -34,6 +34,9 @@
 
 #if defined(_MSC_VER)
 #include <intrin.h>
+#if defined(_SC_X86_64_) || defined(_SC_X86_32_)
+#pragma intrinsic(_mm_pause)
+#endif
 #endif
 
 #if defined(__GNUC__) || defined(__clang__)
@@ -46,9 +49,6 @@
 inline void SC_ATTR_ALWAYS_INLINE spin_loop_hint() noexcept
 {
 #if defined(_SC_X86_64_) || defined(_SC_X86_32_)
-#if defined(_MSC_VER)
-#pragma intrinsic(_mm_pause)
-#endif
     _mm_pause();
 #endif
 }

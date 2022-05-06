@@ -63,7 +63,7 @@ public:
                 tail,
                 nullptr,
                 std::memory_order_acq_rel,
-                std::memory_order_release)) { }
+                std::memory_order_acquire)) { }
 
         auto head = head_->load(std::memory_order_acquire);
         while (head.ptr != tail) {
@@ -106,7 +106,7 @@ public:
                 ptr,
                 VersionPtr{ptr.ptr, 1},
                 std::memory_order_acq_rel,
-                std::memory_order_release)) {
+                std::memory_order_acquire)) {
             ptr.version = 0;
         }
 
@@ -142,7 +142,7 @@ private:
                 queue_tail,
                 node,
                 std::memory_order_acq_rel,
-                std::memory_order_release));
+                std::memory_order_acquire));
 
         // now, the queue.tail_ points to the 'node', and we fetched the last tail saved
         // in 'queue_tail' variable.
