@@ -3,9 +3,9 @@
 /// @brief Test of 'LinkListQueue'.
 ///
 
-#include "queue/link_list_queue.hpp"
-#include "queue/link_list_queue_v2.hpp"
-#include "queue/block_list_queue.hpp"
+#include "queue/mpmc_list_queue.hpp"
+#include "queue/mpmc_list_queue_v2.hpp"
+#include "queue/mpmc_array_queue.hpp"
 
 #include <chrono>
 #include <iostream>
@@ -180,7 +180,7 @@ static const char BlockListTag[] = "B/MPMC";
 
 int main(int argc, char **argv)
 {
-    sc::LinkListQueue<Task> task_queue;
+    sc::mpmc::LinkListQueue<Task> task_queue;
     std::atomic_flag barrier = ATOMIC_FLAG_INIT;
 
     std::cout << "Queue is lock free: " << std::boolalpha <<
@@ -194,7 +194,7 @@ int main(int argc, char **argv)
     produce_threads.reserve(4);
     for (int i = 0; i < 4; ++i) {
         produce_threads.emplace_back(
-                produce<sc::LinkListQueue<Task>, LinkListTag>,
+                produce<sc::mpmc::LinkListQueue<Task>, LinkListTag>,
                 std::ref(task_queue), std::ref(barrier));
     }
     std::vector<std::thread> consume_threads;
@@ -205,18 +205,18 @@ int main(int argc, char **argv)
     std::atomic<uint64_t> counter(0);
     for (int i = 0; i < 2; ++i) {
         consume_threads.emplace_back(
-                consume<sc::LinkListQueue<Task>, LinkListTag>,
+                consume<sc::mpmc::LinkListQueue<Task>, LinkListTag>,
                 std::ref(task_queue), std::ref(barrier),
                 std::ref(result[i]), std::ref(counter), total);
     }
 
-    sc::mpmc::BlockListQueue<Task> mpmc_queue;
+    sc::mpmc::ArrayListQueue<Task> mpmc_queue;
 
     std::vector<std::thread> mpmc_produce_threads;
     mpmc_produce_threads.reserve(4);
     for (int i = 0; i < 4; ++i) {
         mpmc_produce_threads.emplace_back(
-                produce<sc::mpmc::BlockListQueue<Task>, BlockListTag>,
+                produce<sc::mpmc::ArrayListQueue<Task>, BlockListTag>,
                 std::ref(mpmc_queue), std::ref(barrier));
     }
     std::vector<std::thread> mpmc_consumer_threads;
@@ -227,7 +227,7 @@ int main(int argc, char **argv)
     std::atomic<uint64_t> mpmc_counter(0);
     for (int i = 0; i < 2; ++i) {
         mpmc_consumer_threads.emplace_back(
-                consume<sc::mpmc::BlockListQueue<Task>, BlockListTag>,
+                consume<sc::mpmc::ArrayListQueue<Task>, BlockListTag>,
                 std::ref(mpmc_queue), std::ref(barrier),
                 std::ref(mpmc_result[i]), std::ref(mpmc_counter), total);
     }

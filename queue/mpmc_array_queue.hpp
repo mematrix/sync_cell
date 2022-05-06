@@ -1,11 +1,11 @@
 ///
-/// @file  block_list_queue.hpp
+/// @file  mpmc_array_queue.hpp
 /// @brief An unbounded mpmc queue. Original rust implement:
-/// [https://github.com/crossbeam-rs/crossbeam/blob/master/crossbeam-deque/src/deque.rs](Injector).
+/// [Injector](https://github.com/crossbeam-rs/crossbeam/blob/master/crossbeam-deque/src/deque.rs).
 ///
 
-#ifndef SYNC_CELL_BLOCK_LIST_QUEUE_HPP
-#define SYNC_CELL_BLOCK_LIST_QUEUE_HPP
+#ifndef SYNC_CELL_MPMC_ARRAY_QUEUE_HPP
+#define SYNC_CELL_MPMC_ARRAY_QUEUE_HPP
 
 #include <atomic>
 #include <memory>
@@ -23,7 +23,7 @@ namespace sc::mpmc {
 /// and the current thread may yield by giving up the time slice to the OS scheduler.
 /// @tparam T The value type.
 template<typename T>
-class BlockListQueue
+class ArrayListQueue
 {
     // Bits indicating the state of a slot:
     // If a task has been written into the slot, 'Write' is set.
@@ -96,7 +96,7 @@ class BlockListQueue
     static constexpr size_t DefaultPoolSize = 4;
 
     /// @brief An object cache pool to improve the performance of @c Block object allocation
-    /// on a concurrent @c BlockListQueue::enqueue call.
+    /// on a concurrent @c ArrayListQueue::enqueue call.
     /// @tparam N The pool size.
     template<size_t N = DefaultPoolSize>
     class BlockCachePool
@@ -223,7 +223,7 @@ public:
     using const_reference = const value_type &;
 
     /// @brief Creates a new queue.
-    BlockListQueue()
+    ArrayListQueue()
     {
         auto *block = pool_.alloc();
         (*head_).block.store(block);
@@ -232,9 +232,9 @@ public:
         (*tail_).index.store(0);
     }
 
-    BlockListQueue(const BlockListQueue &) = delete;
+    ArrayListQueue(const ArrayListQueue &) = delete;
 
-    BlockListQueue &operator=(const BlockListQueue &) = delete;
+    ArrayListQueue &operator=(const ArrayListQueue &) = delete;
 
     template<typename = std::enable_if_t<std::is_copy_constructible_v<value_type>>>
     void enqueue(const_reference value)
@@ -406,4 +406,4 @@ private:
 
 }
 
-#endif //SYNC_CELL_BLOCK_LIST_QUEUE_HPP
+#endif //SYNC_CELL_MPMC_ARRAY_QUEUE_HPP

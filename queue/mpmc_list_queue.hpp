@@ -1,10 +1,10 @@
 ///
-/// @file  link_list_queue.hpp
-/// @brief An unbounded queue implemented with the linked-list.
+/// @file  mpmc_list_queue.hpp
+/// @brief An unbounded mpmc queue implemented with the linked-list.
 ///
 
-#ifndef SYNC_CELL_LINK_LIST_QUEUE_HPP
-#define SYNC_CELL_LINK_LIST_QUEUE_HPP
+#ifndef SYNC_CELL_MPMC_LIST_QUEUE_HPP
+#define SYNC_CELL_MPMC_LIST_QUEUE_HPP
 
 #include <atomic>
 #include <memory>
@@ -16,7 +16,7 @@
 #include "util/copy_move_selector.hpp"
 
 
-namespace sc {
+namespace sc::mpmc {
 
 template<typename T, typename Alloc = std::allocator<impl::Node<T>>>
 class LinkListQueue
@@ -181,4 +181,4 @@ private:
 
 }
 
-#endif //SYNC_CELL_LINK_LIST_QUEUE_HPP
+#endif //SYNC_CELL_MPMC_LIST_QUEUE_HPP

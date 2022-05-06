@@ -1,10 +1,10 @@
 ///
-/// @file  link_list_queue_v2.hpp
-/// @brief
+/// @file  mpmc_list_queue_v2.hpp
+/// @brief Another unbounded mpmc linked-list queue implementing by std::shared_ptr.
 ///
 
-#ifndef SYNC_CELL_LINK_LIST_QUEUE_V2_HPP
-#define SYNC_CELL_LINK_LIST_QUEUE_V2_HPP
+#ifndef SYNC_CELL_MPMC_LIST_QUEUE_V2_HPP
+#define SYNC_CELL_MPMC_LIST_QUEUE_V2_HPP
 
 #include <atomic>
 #include <memory>
@@ -53,7 +53,7 @@ public:
                 tail,
                 nullptr,
                 std::memory_order_acq_rel,
-                std::memory_order_release)) { }
+                std::memory_order_acquire)) { }
 
         std::shared_ptr<Node> head = (*head_).load(std::memory_order_acquire);
         auto p = head.get();
@@ -94,7 +94,7 @@ public:
             if (!next) {
                 return {};
             }
-        } while (!(*head_).compare_exchange_weak(ptr, next, std::memory_order_acq_rel, std::memory_order_release));
+        } while (!(*head_).compare_exchange_weak(ptr, next, std::memory_order_acq_rel, std::memory_order_acquire));
 
         return std::move(next->value);
     }
@@ -117,7 +117,7 @@ private:
                 queue_tail,
                 node,
                 std::memory_order_acq_rel,
-                std::memory_order_release));
+                std::memory_order_acquire));
 
         queue_tail->next.store(node, std::memory_order_release);
     }
@@ -130,4 +130,4 @@ private:
 
 #endif
 
-#endif //SYNC_CELL_LINK_LIST_QUEUE_V2_HPP
+#endif //SYNC_CELL_MPMC_LIST_QUEUE_V2_HPP

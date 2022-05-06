@@ -1,7 +1,7 @@
 ///
 /// @file  back_off.hpp
 /// @brief Port from the crossbeam-rs project:
-/// [https://github.com/crossbeam-rs/crossbeam/blob/master/crossbeam-utils/src/backoff.rs](Backoff).
+/// [Backoff](https://github.com/crossbeam-rs/crossbeam/blob/master/crossbeam-utils/src/backoff.rs).
 ///
 
 #ifndef SYNC_CELL_BACK_OFF_HPP
