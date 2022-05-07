@@ -7,5 +7,88 @@ Some `ConcurrentQueue` types are provided in this directory:
 | [`sc::mpmc::ArrayListQueue`](./mpmc_array_queue.hpp) | MPMC | Unbounded | `queue/mpmc_array_queue.hpp` | Implemented using array + single linked-list. |
 | [`sc::mpmc::LinkedListQueueV2`](./mpmc_list_queue_v2.hpp) | MPMC | Unbounded | `queue/mpmc_list_queue_v2.hpp` | Implemented using single linked-list, but memory is managed by `std::atomic<std::shared_ptr>`. |
 
+> The `sc::mpmc::ArrayListQueue` is ported from [the `Injector` of **crossbeam** project](https://github.com/crossbeam-rs/crossbeam/blob/master/crossbeam-deque/src/deque.rs) which is written by Rust.
 
+# Simple Performance Test
+A simple read/write test is done with each queue type, and as a comparison, a similar test is also write for the Rust version (`crossbeam-deque/Injector`) and Java version (`java.util.concurrent.ConcurrentLinkedQueue`).
 
+The Rust test code is in [test/res/crossbeam_deque_test.rs](../test/res/crossbeam_deque_test.rs). Create a new binary package using the `Cargo`, edit the `Cargo.toml` and add the `crossbeam` dependence:
+```toml
+[dependencies]
+crossbeam = "0.8"
+```
+Then copy the test file to the `src` directory, edit the `main.rs` like this:
+```rust
+extern crate crossbeam;
+
+mod crossbeam_deque_test;
+use crate::crossbeam_deque_test::concurrent_enqueue_dequeue;
+
+fn main() {
+    concurrent_enqueue_dequeue();
+}
+```
+
+The Java test code is in [Test.java](../test/res/Test.java). Create a simple maven project and put the test file in the `src/main/java` directory, then add the `org.apache.commons.commons-lang3` dependence in the `pom.xml` file:
+```xml
+<dependency>
+    <groupId>org.apache.commons</groupId>
+    <artifactId>commons-lang3</artifactId>
+    <version>3.12.0</version>
+</dependency>
+```
+
+**For the MPMC queue, in all tests, unless otherwise specified, the produce thread's count is 4 and the consume thread's count is 2.**
+
+*Each produce thread will loop by 10,000,000 times.*
+
+## Rust Version
+One test result is like:
+```text
+[Produce] Thread [ThreadId(5)] finished. total time: 1576939800ns
+[Produce] Thread [ThreadId(2)] finished. total time: 1590594900ns
+[Produce] Thread [ThreadId(3)] finished. total time: 1609360500ns
+[Produce] Thread [ThreadId(4)] finished. total time: 1637673100ns
+[Consume] Thread [ThreadId(7)] finished. total time: 3127333400ns
+[Consume] Thread [ThreadId(6)] finished. total time: 3127333600ns
+Thread [ThreadId(6)] result size: 19837269
+Thread [ThreadId(7)] result size: 20162731
+```
+
+The average put time of the produce thread is `~1600ms`, and the read time is `~3127ms`.
+
+## Java Version
+> There is a little difference between the Java test code and others: The Java code does not save and collect the read result.
+
+One test result is like:
+```text
+put: thread=24,time=00:00:06.380
+put: thread=23,time=00:00:06.392
+put: thread=26,time=00:00:06.406
+put: thread=25,time=00:00:06.425
+read: thread=28,time=6648641300
+read: thread=27,time=6648631700
+put: thread=31,time=00:00:05.945
+put: thread=30,time=00:00:05.950
+put: thread=29,time=00:00:05.968
+put: thread=32,time=00:00:05.968
+read: thread=33,time=6496438400
+read: thread=34,time=6496146100
+......
+put: thread=62,time=00:00:04.488
+put: thread=60,time=00:00:04.544
+put: thread=59,time=00:00:04.547
+put: thread=61,time=00:00:04.549
+read: thread=64,time=4929431100
+read: thread=63,time=4928866700
+put: thread=68,time=00:00:04.600
+put: thread=65,time=00:00:04.606
+put: thread=67,time=00:00:04.608
+put: thread=66,time=00:00:04.626
+read: thread=69,time=4958323200
+read: thread=70,time=4958083600
+```
+
+> The test jar is run with `-server` option.
+
+We can see that the average put time of the produce thread is `~6400ms` on the cold launch and the read time is `~6648ms`, after running for some time, the average cost time is gradually stable (because of the JIT and other JVM optimizations), the average put time is `~4500ms` and the read time is `~4900ms`.
