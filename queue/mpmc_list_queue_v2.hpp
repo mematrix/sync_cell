@@ -18,7 +18,7 @@
 namespace sc::mpmc {
 
 template<typename T>
-class LinkListQueueV2
+class LinkedListQueueV2
 {
     struct Node
     {
@@ -39,14 +39,18 @@ public:
     using reference = value_type &;
     using const_reference = const value_type &;
 
-    LinkListQueueV2()
+    LinkedListQueueV2()
     {
         auto dummy = std::make_shared<Node>();
         (*head_).store(dummy);
         (*tail_).store(dummy);
     }
 
-    ~LinkListQueueV2()
+    LinkedListQueueV2(const LinkedListQueueV2 &) = delete;
+
+    LinkedListQueueV2 &operator=(const LinkedListQueueV2 &) = delete;
+
+    ~LinkedListQueueV2()
     {
         auto *tail = (*tail_).load(std::memory_order_acquire);
         while (!(*tail_).compare_exchange_weak(

@@ -19,7 +19,7 @@
 namespace sc::mpmc {
 
 template<typename T, typename Alloc = std::allocator<impl::Node<T>>>
-class LinkListQueue
+class LinkedListQueue
 {
     using Node = impl::Node<T>;
     using AllocTrait = std::allocator_traits<Alloc>;
@@ -44,7 +44,7 @@ public:
     using reference = value_type &;
     using const_reference = const value_type &;
 
-    explicit LinkListQueue(const allocator_type &al = allocator_type()) : allocator_(al)
+    explicit LinkedListQueue(const allocator_type &al = allocator_type()) : allocator_(al)
     {
         Node *p = AllocTrait::allocate(allocator_, 1);
         AllocTrait::construct(allocator_, p);   // construct a default empty node
@@ -52,11 +52,11 @@ public:
         tail_->store(p);
     }
 
-    LinkListQueue(const LinkListQueue &) = delete;
+    LinkedListQueue(const LinkedListQueue &) = delete;
 
-    LinkListQueue &operator=(const LinkListQueue &) = delete;
+    LinkedListQueue &operator=(const LinkedListQueue &) = delete;
 
-    ~LinkListQueue()
+    ~LinkedListQueue()
     {
         auto *tail = tail_->load(std::memory_order_acquire);
         while (!tail_->compare_exchange_weak(

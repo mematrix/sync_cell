@@ -1,6 +1,6 @@
 ///
 /// @file  link_list_queue_test.cpp
-/// @brief Test of 'LinkListQueue'.
+/// @brief Test for 'sc::mpmc::LinkedListQueue' and 'sc::mpmc::LinkedListQueueV2'.
 ///
 
 #include "queue/mpmc_list_queue.hpp"
@@ -11,7 +11,7 @@
 
 int main(int argc, char **argv)
 {
-    sc::mpmc::LinkListQueue<Task> task_queue;
+    sc::mpmc::LinkedListQueue<Task> task_queue;
     std::atomic_flag barrier = ATOMIC_FLAG_INIT;
 
     std::cout << "Queue is lock free: " << std::boolalpha <<
@@ -23,7 +23,7 @@ int main(int argc, char **argv)
     produce_threads.reserve(4);
     for (int i = 0; i < 4; ++i) {
         produce_threads.emplace_back(
-                produce<sc::mpmc::LinkListQueue<Task>>,
+                produce<sc::mpmc::LinkedListQueue<Task>>,
                 std::ref(task_queue), std::ref(barrier));
     }
     std::vector<std::thread> consume_threads;
@@ -34,7 +34,7 @@ int main(int argc, char **argv)
     std::atomic<uint64_t> counter(0);
     for (int i = 0; i < 2; ++i) {
         consume_threads.emplace_back(
-                consume<sc::mpmc::LinkListQueue<Task>>,
+                consume<sc::mpmc::LinkedListQueue<Task>>,
                 std::ref(task_queue), std::ref(barrier),
                 std::ref(result[i]), std::ref(counter), total);
     }
