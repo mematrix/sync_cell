@@ -43,7 +43,7 @@ public:
     {
         auto dummy = std::make_shared<Node>();
         (*head_).store(dummy);
-        (*tail_).store(dummy);
+        (*tail_).store(dummy.get());
     }
 
     LinkedListQueueV2(const LinkedListQueueV2 &) = delete;

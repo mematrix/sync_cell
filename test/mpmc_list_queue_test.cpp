@@ -1,17 +1,20 @@
 ///
-/// @file  link_list_queue_test.cpp
+/// @file  mpmc_list_queue_test.cpp
 /// @brief Test for 'sc::mpmc::LinkedListQueue' and 'sc::mpmc::LinkedListQueueV2'.
 ///
 
 #include "queue/mpmc_list_queue.hpp"
 #include "queue/mpmc_list_queue_v2.hpp"
 
+#include <cstring>
+
 #include "queue_thread_run.hpp"
 
 
-int main(int argc, char **argv)
+template<typename Queue>
+void run()
 {
-    sc::mpmc::LinkedListQueue<Task> task_queue;
+    Queue task_queue;
     std::atomic_flag barrier = ATOMIC_FLAG_INIT;
 
     std::cout << "Queue is lock free: " << std::boolalpha <<
@@ -23,7 +26,7 @@ int main(int argc, char **argv)
     produce_threads.reserve(4);
     for (int i = 0; i < 4; ++i) {
         produce_threads.emplace_back(
-                produce<sc::mpmc::LinkedListQueue<Task>>,
+                produce<Queue>,
                 std::ref(task_queue), std::ref(barrier));
     }
     std::vector<std::thread> consume_threads;
@@ -34,7 +37,7 @@ int main(int argc, char **argv)
     std::atomic<uint64_t> counter(0);
     for (int i = 0; i < 2; ++i) {
         consume_threads.emplace_back(
-                consume<sc::mpmc::LinkedListQueue<Task>>,
+                consume<Queue>,
                 std::ref(task_queue), std::ref(barrier),
                 std::ref(result[i]), std::ref(counter), total);
     }
@@ -53,6 +56,19 @@ int main(int argc, char **argv)
 
     std::cout << "Result1.count = " << result[0].size() << std::endl;
     std::cout << "Result2.count = " << result[1].size() << std::endl;
+}
+
+int main(int argc, char **argv)
+{
+    if (argc > 1 && strcmp(argv[1], "-v2") == 0) {
+#if __cpp_lib_atomic_shared_ptr
+        run<sc::mpmc::LinkedListQueueV2<Task>>();
+#else
+        std::cout << "Error: Built the test without cpp atomic_shared_ptr support." << std::endl;
+#endif
+    } else {
+        run<sc::mpmc::LinkedListQueue<Task>>();
+    }
 
     std::cout << "hello world" << std::endl;
 
