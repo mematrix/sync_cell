@@ -93,12 +93,12 @@ class ArrayListQueue
     using AllocTrait = std::allocator_traits<std::allocator<Block>>;
 
     /// @brief Default size of the object cache pool.
-    static constexpr size_t DefaultPoolSize = 4;
+    static constexpr uint32_t DefaultPoolSize = 4;
 
     /// @brief An object cache pool to improve the performance of @c Block object allocation
     /// on a concurrent @c ArrayListQueue::enqueue call.
     /// @tparam N The pool size.
-    template<size_t N = DefaultPoolSize>
+    template<uint32_t N = DefaultPoolSize>
     class BlockCachePool
     {
     public:
@@ -107,7 +107,7 @@ class ArrayListQueue
         Block *alloc()
         {
             Block *ret = nullptr;
-            for (int i = 0; i < N; ++i) {
+            for (uint32_t i = 0; i < N; ++i) {
                 auto *p = alloc_cache_[i].load(std::memory_order_relaxed);
                 if (p != nullptr &&
                     alloc_cache_[i].compare_exchange_strong(
@@ -132,7 +132,7 @@ class ArrayListQueue
             AllocTrait::destroy(allocator_, block);
 
 //            std::atomic_thread_fence(std::memory_order_release);
-            for (int i = 0; i < N; ++i) {
+            for (uint32_t i = 0; i < N; ++i) {
                 auto *p = alloc_cache_[i].load(std::memory_order_relaxed);
                 if (p == nullptr &&
                     alloc_cache_[i].compare_exchange_strong(
@@ -148,7 +148,7 @@ class ArrayListQueue
 
         ~BlockCachePool()
         {
-            for (int i = 0; i < N; ++i) {
+            for (uint32_t i = 0; i < N; ++i) {
                 auto *p = alloc_cache_[i].load(std::memory_order_relaxed);
                 if (p != nullptr &&
                     alloc_cache_[i].compare_exchange_strong(
@@ -166,7 +166,7 @@ class ArrayListQueue
         std::allocator<Block> allocator_;
     };
 
-    template<size_t N = DefaultPoolSize>
+    template<uint32_t N = DefaultPoolSize>
     struct PoolBlockDeleter
     {
         BlockCachePool<N> *pool;
@@ -329,7 +329,7 @@ public:
         // but couldn't because we were busy reading from the slot.
         if ((offset + 1 == BlockCap) ||
             ((slot.state.fetch_or(Read, std::memory_order_acq_rel) & Destroy) != 0)) {
-            destroy_block(block, offset, pool_);
+            destroy_block(block, (uint32_t)offset, pool_);
         }
 
         return ret;
