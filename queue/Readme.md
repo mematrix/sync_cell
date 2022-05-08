@@ -7,7 +7,12 @@ Some `ConcurrentQueue` types are provided in this directory:
 | [`sc::mpmc::ArrayListQueue`](./mpmc_array_queue.hpp) | MPMC | Unbounded | `queue/mpmc_array_queue.hpp` | Implemented using array + single linked-list. |
 | [`sc::mpmc::LinkedListQueueV2`](./mpmc_list_queue_v2.hpp) | MPMC | Unbounded | `queue/mpmc_list_queue_v2.hpp` | Implemented using single linked-list, but memory is managed by `std::atomic<std::shared_ptr>`. |
 
-> The `sc::mpmc::ArrayListQueue` is ported from [the `Injector` of **crossbeam** project](https://github.com/crossbeam-rs/crossbeam/blob/master/crossbeam-deque/src/deque.rs) which is written by Rust.
+> The `sc::mpmc::ArrayListQueue` is ported from [the `Injector` of **crossbeam** project](https://github.com/crossbeam-rs/crossbeam/blob/master/crossbeam-deque/src/deque.rs) which is written in Rust.
+
+From the following performance test result, some optimizations can be done:
+* [ ] `sc::mpmc::LinkedListQueue` head pointer's tag can fold into the pointer itself.
+* [ ] `LinkedListQueue` with **MPSC** type.
+* [ ] Add a template param to `sc::mpmc::ArrayListQueu` to control the size of the inner cache pool?
 
 # Simple Performance Test
 A simple read/write test is done with each queue type, and as a comparison, a similar test is also write for the Rust version (`crossbeam-deque/Injector`) and Java version (`java.util.concurrent.ConcurrentLinkedQueue`).
@@ -29,7 +34,7 @@ fn main() {
 }
 ```
 
-The Java test code is in [Test.java](../test/res/Test.java). Create a simple maven project and put the test file in the `src/main/java` directory, then add the `org.apache.commons.commons-lang3` dependence in the `pom.xml` file:
+The Java test code is in [test/res/Test.java](../test/res/Test.java). Create a simple maven project and put the test file in the `src/main/java` directory, then add the `org.apache.commons.commons-lang3` dependence in the `pom.xml` file:
 ```xml
 <dependency>
     <groupId>org.apache.commons</groupId>
@@ -38,9 +43,27 @@ The Java test code is in [Test.java](../test/res/Test.java). Create a simple mav
 </dependency>
 ```
 
-**For the MPMC queue, in all tests, unless otherwise specified, the produce thread's count is 4 and the consume thread's count is 2.**
+**For the MPMC queue, in all tests, unless otherwise specified, the producer thread's count is 4 and the consumer thread's count is 2.**
 
 *Each produce thread will loop by 10,000,000 times.*
+
+---
+
+In addition, the single-threaded version was also tested for comparison. Test code is in [test/single_produce_test.cpp](../test/single_produce_test.cpp). Only do a put operation in the test.
+
+---
+
+**All C++ test executables are built with MSVC(VS2022) in Windows 11.**
+
+Rust toolchain: stable-x86_64-pc-windows-gnu (1.60).
+
+Java version:
+```text
+# java -version
+openjdk version "17.0.1" 2021-10-19 LTS
+OpenJDK Runtime Environment Zulu17.30+15-CA (build 17.0.1+12-LTS)
+OpenJDK 64-Bit Server VM Zulu17.30+15-CA (build 17.0.1+12-LTS, mixed mode, sharing)
+```
 
 ## Rust Version
 One test result is like:
@@ -55,7 +78,7 @@ Thread [ThreadId(6)] result size: 19837269
 Thread [ThreadId(7)] result size: 20162731
 ```
 
-The average put time of the produce thread is `~1600ms`, and the read time is `~3127ms`.
+The average put time of the producer thread is `~1600ms`, and the read time is `~3127ms`.
 
 ## Java Version
 > There is a little difference between the Java test code and others: The Java code does not save and collect the read result.
@@ -91,4 +114,57 @@ read: thread=70,time=4958083600
 
 > The test jar is run with `-server` option.
 
-We can see that the average put time of the produce thread is `~6400ms` on the cold launch and the read time is `~6648ms`, after running for some time, the average cost time is gradually stable (because of the JIT and other JVM optimizations), the average put time is `~4500ms` and the read time is `~4900ms`.
+We can see that the average put time of the producer thread is `~6400ms` on the cold launch and the read time is `~6648ms`, after running for some time, the average cost time is gradually stable (because of the JIT and other JVM optimizations), the average put time is `~4500ms` and the read time is `~4900ms`.
+
+## Single-threaded Version
+One test result:
+```text
+[Single] Thread [15060] finished. total time: 494750800ns
+```
+
+The simple single-threaded implement runs very fast, the average time of put operation is `~490ms`.
+
+## mpmc::LinkedListQueue
+> The execution time of the consumer thread is very unstable. The time fluctuation is more than 1000ms.
+
+One test result:
+```text
+[Produce] Thread [30024] finished. total time: 1507336000ns
+[Produce] Thread [28828] finished. total time: 1508152000ns
+[Produce] Thread [27780] finished. total time: 1539461300ns
+[Produce] Thread [26924] finished. total time: 1544745200ns
+[Consume] Consumer Thread [7124] finished. total time: 4945263400ns
+[Consume] Consumer Thread [21496] finished. total time: 4945282900ns
+```
+
+The average execution time of the producer thread is `~1500ms`.
+
+## mpmc::ArrayListQueue
+One test result:
+```text
+[Produce] Thread [26732] finished. total time: 1396067100ns
+[Produce] Thread [33080] finished. total time: 1403089400ns
+[Produce] Thread [29016] finished. total time: 1431001400ns
+[Produce] Thread [23024] finished. total time: 1444958900ns
+[Consume] Consumer Thread [9080] finished. total time: 2983311000ns
+[Consume] Consumer Thread [6108] finished. total time: 2983334600ns
+```
+
+The average put time of the producer thread is `~1400ms`, and the read time is `~3000ms`.
+
+The average put/read time is slightly shorter than [the rust version](#rust-version), I think the possible reasons are:
+* The Rust toolchain is gnu version but not the msvc. This may lead a difference performance.
+* A simple memory cache pool is used to reduce frequent memory allocation and release operations in the C++ implementation code.
+
+## mpmc::LinkedListQueueV2
+> **Note**: Sometime the test process will run in crash because of the stack overflow problem. debug ing...
+
+One test result:
+```text
+[Produce] Thread [8480] finished. total time: 2117627700ns
+[Produce] Thread [28472] finished. total time: 2122792900ns
+[Produce] Thread [6964] finished. total time: 2139098900ns
+[Produce] Thread [30580] finished. total time: 2142942200ns
+[Consume] Consumer Thread [31352] finished. total time: 13247829200ns
+[Consume] Consumer Thread [31512] finished. total time: 13247834800ns
+```

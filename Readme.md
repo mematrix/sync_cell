@@ -27,7 +27,7 @@ Last but not the least, most container types may release the resources(memory) i
   * [`sc::mpmc::ArrayListQueue`](./queue/mpmc_array_queue.hpp)
 
 ## Utilities
-* `Backoff`: An utility to perform exponential backoff in spin loops. Port from [crossbeam-util/Backoff](https://github.com/crossbeam-rs/crossbeam/blob/master/crossbeam-utils/src/backoff.rs).
+* `Backoff`: An utility to perform exponential backoff in spin loops. Ported from [crossbeam-util/Backoff](https://github.com/crossbeam-rs/crossbeam/blob/master/crossbeam-utils/src/backoff.rs).
 * `CachePadded`: Pads and aligns a value to the length of a cache line. Inspired by **crossbeam-util/CachePadded**, and the API design is similar to the `std::optional`.
   > There is no rust auto-deref mechanism in C++, so the `operator->` and `operator*` are overload to simplify the access and make it behaves like a smart pointer.
 

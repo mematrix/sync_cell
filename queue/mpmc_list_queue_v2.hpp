@@ -111,6 +111,7 @@ public:
 private:
     void enqueue_node(const std::shared_ptr<Node> &node)
     {
+        auto *ptr = node.get();
         Node *queue_tail = (*tail_).load(std::memory_order_acquire);
         do {
             if (queue_tail == nullptr) {
@@ -119,7 +120,7 @@ private:
             }
         } while (!(*tail_).compare_exchange_weak(
                 queue_tail,
-                node,
+                ptr,
                 std::memory_order_acq_rel,
                 std::memory_order_acquire));
 
