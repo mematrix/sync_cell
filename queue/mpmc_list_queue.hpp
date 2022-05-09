@@ -11,20 +11,33 @@
 #include <optional>
 #include <type_traits>
 
-#include "shared/link_list_node.hpp"
+#include "shared/compiler_workaround.hpp"
+#include "shared/object_cache_pool.hpp"
 #include "util/cache_padded.hpp"
 #include "util/copy_move_selector.hpp"
 
 
 namespace sc::mpmc {
 
-template<typename T, typename Alloc = std::allocator<impl::Node<T>>>
+template<typename T>
 class LinkedListQueue
 {
-    using Node = impl::Node<T>;
-    using AllocTrait = std::allocator_traits<Alloc>;
+    struct Node
+    {
+        std::atomic<Node *> next{nullptr};
+        std::optional<T> value;
 
-    static_assert(std::is_same_v<Node, typename AllocTrait::value_type>);
+        constexpr Node() = default;
+
+        template<typename... Args>
+        explicit Node(std::in_place_t, Args &&... args) : value(std::in_place, std::forward<Args>(args)...)
+        {
+            static_assert(std::is_constructible_v<T, Args &&...>);
+        }
+    };
+
+    /* default size for cache pool */
+    static constexpr uint32_t DefaultPoolSize = 0;
 
     static constexpr size_t PointerSize = sizeof(void *);
 
@@ -40,14 +53,12 @@ class LinkedListQueue
 
 public:
     using value_type = T;
-    using allocator_type = typename AllocTrait::allocator_type;
     using reference = value_type &;
     using const_reference = const value_type &;
 
-    explicit LinkedListQueue(const allocator_type &al = allocator_type()) : allocator_(al)
+    LinkedListQueue()
     {
-        Node *p = AllocTrait::allocate(allocator_, 1);
-        AllocTrait::construct(allocator_, p);   // construct a default empty node
+        Node *p = pool_.TEMPLATE_CALL alloc();   // construct a default empty node
         head_->store(VersionPtr{p, 0});
         tail_->store(p);
     }
@@ -83,8 +94,7 @@ public:
     template<typename = std::enable_if_t<std::is_copy_constructible_v<value_type>>>
     void enqueue(const_reference value)
     {
-        Node *p = AllocTrait::allocate(allocator_, 1);
-        AllocTrait::construct(allocator_, p, std::in_place, value);
+        Node *p = pool_.TEMPLATE_CALL alloc(std::in_place, value);
 
         enqueue_node(p);
     }
@@ -92,8 +102,7 @@ public:
     template<typename = std::enable_if_t<std::is_move_constructible_v<value_type>>>
     void enqueue(value_type &&value)
     {
-        Node *p = AllocTrait::allocate(allocator_, 1);
-        AllocTrait::construct(allocator_, p, std::in_place, std::move(value));
+        Node *p = pool_.TEMPLATE_CALL alloc(std::in_place, std::move(value));
 
         enqueue_node(p);
     }
@@ -166,8 +175,7 @@ private:
 
     void release_node(Node *node)
     {
-        AllocTrait::destroy(allocator_, node);
-        AllocTrait::deallocate(allocator_, node, 1);
+        pool_.dealloc(node);
     }
 
     // dequeue direction
@@ -176,7 +184,7 @@ private:
     util::CachePadded<std::atomic<Node *>> tail_;
 
     // allocator
-    allocator_type allocator_;
+    ObjectCachePool<Node, DefaultPoolSize> pool_;
 };
 
 }
