@@ -11,6 +11,8 @@
 #include <memory>
 #include <optional>
 
+#include "shared/compiler_workaround.hpp"
+#include "shared/object_cache_pool.hpp"
 #include "util/back_off.hpp"
 #include "util/cache_padded.hpp"
 #include "util/copy_move_selector.hpp"
@@ -90,81 +92,14 @@ class ArrayListQueue
         }
     };
 
-    using AllocTrait = std::allocator_traits<std::allocator<Block>>;
-
     /// @brief Default size of the object cache pool.
-    static constexpr uint32_t DefaultPoolSize = 4;
+    static constexpr uint32_t DefaultPoolSize = 2;
 
     /// @brief An object cache pool to improve the performance of @c Block object allocation
     /// on a concurrent @c ArrayListQueue::enqueue call.
     /// @tparam N The pool size.
     template<uint32_t N = DefaultPoolSize>
-    class BlockCachePool
-    {
-    public:
-        constexpr BlockCachePool() noexcept = default;
-
-        Block *alloc()
-        {
-            Block *ret = nullptr;
-            for (uint32_t i = 0; i < N; ++i) {
-                auto *p = alloc_cache_[i].load(std::memory_order_relaxed);
-                if (p != nullptr &&
-                    alloc_cache_[i].compare_exchange_strong(
-                            p, nullptr,
-                            std::memory_order_relaxed,
-                            std::memory_order_relaxed)) {
-                    ret = p;
-                    break;
-                }
-            }
-
-            if (ret == nullptr) {
-                ret = AllocTrait::allocate(allocator_, 1);
-            }
-
-            AllocTrait::construct(allocator_, ret);
-            return ret;
-        }
-
-        void dealloc(Block *block)
-        {
-            AllocTrait::destroy(allocator_, block);
-
-//            std::atomic_thread_fence(std::memory_order_release);
-            for (uint32_t i = 0; i < N; ++i) {
-                auto *p = alloc_cache_[i].load(std::memory_order_relaxed);
-                if (p == nullptr &&
-                    alloc_cache_[i].compare_exchange_strong(
-                            p, block,
-                            std::memory_order_relaxed,
-                            std::memory_order_relaxed)) {
-                    return;
-                }
-            }
-
-            AllocTrait::deallocate(allocator_, block, 1);
-        }
-
-        ~BlockCachePool()
-        {
-            for (uint32_t i = 0; i < N; ++i) {
-                auto *p = alloc_cache_[i].load(std::memory_order_relaxed);
-                if (p != nullptr &&
-                    alloc_cache_[i].compare_exchange_strong(
-                            p, nullptr,
-                            std::memory_order_relaxed,
-                            std::memory_order_relaxed)) {
-                    AllocTrait::deallocate(allocator_, p, 1);
-                }
-            }
-//            std::atomic_thread_fence(std::memory_order_acquire);
-        }
-
-    private:
-        std::atomic<Block *> alloc_cache_[N];
-        std::allocator<Block> allocator_;
-    };
+    using BlockCachePool = ObjectCachePool<Block, N>;
 
     template<uint32_t N = DefaultPoolSize>
     struct PoolBlockDeleter
@@ -184,7 +119,7 @@ class ArrayListQueue
     /// @param pool A @c Block object cache pool.
     static PoolBlockPtr new_block(BlockCachePool<> &pool)
     {
-        auto *b = pool.alloc();
+        auto *b = pool.TEMPLATE_CALL alloc();
         return {b, {&pool}};
     }
 
@@ -225,7 +160,7 @@ public:
     /// @brief Creates a new queue.
     ArrayListQueue()
     {
-        auto *block = pool_.alloc();
+        auto *block = pool_.TEMPLATE_CALL alloc();
         (*head_).block.store(block);
         (*head_).index.store(0);
         (*tail_).block.store(block);

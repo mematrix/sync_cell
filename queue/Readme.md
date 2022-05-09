@@ -45,7 +45,7 @@ The Java test code is in [test/res/Test.java](../test/res/Test.java). Create a s
 
 **For the MPMC queue, in all tests, unless otherwise specified, the producer thread's count is 4 and the consumer thread's count is 2.**
 
-*Each produce thread will loop by 10,000,000 times.*
+*Each producer thread will loop by 10,000,000 times.*
 
 ---
 
@@ -150,11 +150,17 @@ One test result:
 [Consume] Consumer Thread [6108] finished. total time: 2983334600ns
 ```
 
-The average put time of the producer thread is `~1400ms`, and the read time is `~3000ms`.
+The average put time of the producer thread is `~1400ms`, and the read time is `~3000ms`. (The number of producer thread and consumer thread is default and the pool size is 4, this is not the best performance time, see below.)
 
 The average put/read time is slightly shorter than [the rust version](#rust-version), I think the possible reasons are:
 * The Rust toolchain is gnu version but not the msvc. This may lead a difference performance.
 * A simple memory cache pool is used to reduce frequent memory allocation and release operations in the C++ implementation code.
+> By more tests with difference configs, if the number of consumer thread is less than the number of producer thread, using a pool size of 2 can get a better performance and balance of the put and read time. The put time is `~1400ms` and the read time is `~2550ms`.
+> 
+> If the number of consumer thread is more than the number of producer thread, using the direct memory alloc/release strategy may have more good performance. (In my test, using a pool size of 2 can get almost the same performance)
+
+From the test:
+> * The `CachePool` holds an array of `std::atomic<object *>`, although the atomic object is accessed from multiple threads, if aligning the atomic object by the *cache line size*, the running time of each thread (both producer and consumer) will become longer. **Probably because all atomic accesses is in a memory order of `std::memory_order_relaxed`.**
 
 ## mpmc::LinkedListQueueV2
 > **Note**: Sometime the test process will run in crash because of the stack overflow problem. debug ing...
