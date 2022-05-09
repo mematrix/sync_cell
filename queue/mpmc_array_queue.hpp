@@ -175,11 +175,7 @@ public:
     void enqueue(const_reference value)
     {
         enqueue_value([&value](std::optional<value_type> &o) {
-#if defined(_MSC_VER)
-            o.emplace(value);
-#else
-            o.template emplace(value);
-#endif
+            o.TEMPLATE_CALL emplace(value);
         });
     }
 
@@ -187,11 +183,7 @@ public:
     void enqueue(value_type &&value)
     {
         enqueue_value([&value](std::optional<value_type> &o) {
-#if defined(_MSC_VER)
-            o.emplace(std::move(value));
-#else
-            o.template emplace(std::move(value));
-#endif
+            o.TEMPLATE_CALL emplace(std::move(value));
         });
     }
 
