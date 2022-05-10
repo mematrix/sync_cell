@@ -10,7 +10,7 @@ Some `ConcurrentQueue` types are provided in this directory:
 > The `sc::mpmc::ArrayListQueue` is ported from [the `Injector` of **crossbeam** project](https://github.com/crossbeam-rs/crossbeam/blob/master/crossbeam-deque/src/deque.rs) which is written in Rust.
 
 From the following performance test result, some optimizations can be done:
-* [ ] `sc::mpmc::LinkedListQueue` head pointer's tag can fold into the pointer itself.
+* [x] `sc::mpmc::LinkedListQueue` head pointer's tag can fold into the pointer itself.
 * [ ] `LinkedListQueue` with **MPSC** type.
 * [ ] Add a template param to `sc::mpmc::ArrayListQueu` to control the size of the inner cache pool?
 
@@ -125,19 +125,19 @@ One test result:
 The simple single-threaded implement runs very fast, the average time of put operation is `~490ms`.
 
 ## mpmc::LinkedListQueue
-> The execution time of the consumer thread is very unstable. The time fluctuation is more than 1000ms.
+> ~~The execution time of the consumer thread is very unstable. The time fluctuation is more than 1000ms.~~(By storing the tag value in the pointer's least significant bit, the execution time is stable.)
 
 One test result:
 ```text
-[Produce] Thread [30024] finished. total time: 1507336000ns
-[Produce] Thread [28828] finished. total time: 1508152000ns
-[Produce] Thread [27780] finished. total time: 1539461300ns
-[Produce] Thread [26924] finished. total time: 1544745200ns
-[Consume] Consumer Thread [7124] finished. total time: 4945263400ns
-[Consume] Consumer Thread [21496] finished. total time: 4945282900ns
+[Produce] Thread [29380] finished. total time: 1490393900ns
+[Produce] Thread [28956] finished. total time: 1494169700ns
+[Produce] Thread [34572] finished. total time: 1498451600ns
+[Produce] Thread [16888] finished. total time: 1502975300ns
+[Consume] Consumer Thread [26536] finished. total time: 4020464100ns
+[Consume] Consumer Thread [35156] finished. total time: 4020454800ns
 ```
 
-The average execution time of the producer thread is `~1500ms`.
+The average execution time of the producer thread is `~1500ms`, and the read time is `~4000ms`.
 
 ## mpmc::ArrayListQueue
 One test result:

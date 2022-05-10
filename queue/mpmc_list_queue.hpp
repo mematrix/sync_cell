@@ -22,7 +22,9 @@ namespace sc::mpmc {
 template<typename T>
 class LinkedListQueue
 {
-    struct Node
+    static constexpr size_t PointerSize = sizeof(void *);
+
+    struct alignas(PointerSize) alignas(alignof(std::optional<T>)) Node
     {
         std::atomic<Node *> next{nullptr};
         std::optional<T> value;
@@ -39,18 +41,6 @@ class LinkedListQueue
     /* default size for cache pool */
     static constexpr uint32_t DefaultPoolSize = 0;
 
-    static constexpr size_t PointerSize = sizeof(void *);
-
-    /// @brief Paired a pointer with a version info to avoid the ABA problem.
-    /// Whenever we change the pointer, the version is incremented.
-    struct alignas(2 * PointerSize) VersionPtr
-    {
-        Node *ptr;
-        uintptr_t version;
-    };
-    static_assert(alignof(VersionPtr) == 2 * PointerSize);
-    static_assert(sizeof(VersionPtr) == 2 * PointerSize);
-
 public:
     using value_type = T;
     using reference = value_type &;
@@ -59,7 +49,7 @@ public:
     LinkedListQueue()
     {
         Node *p = pool_.TEMPLATE_CALL alloc();   // construct a default empty node
-        head_->store(VersionPtr{p, 0});
+        head_->store(p);
         tail_->store(p);
     }
 
@@ -76,8 +66,8 @@ public:
                 std::memory_order_acq_rel,
                 std::memory_order_acquire)) { }
 
-        auto head = head_->load(std::memory_order_acquire);
-        while (head.ptr != tail) {
+        auto *head = head_->load(std::memory_order_acquire);
+        while (head != tail) {
             clear();
             head = head_->load(std::memory_order_acquire);
         }
@@ -90,7 +80,6 @@ public:
         return head_->is_lock_free() && tail_->is_lock_free();
     }
 
-    // todo: try-pop & pop(wait, spin first, sleep if spin long time)
     template<typename = std::enable_if_t<std::is_copy_constructible_v<value_type>>>
     void enqueue(const_reference value)
     {
@@ -107,27 +96,35 @@ public:
         enqueue_node(p);
     }
 
+    // todo: pop(wait, spin first, sleep if spin long time)
     std::optional<value_type> try_dequeue()
     {
-        auto ptr = head_->load(std::memory_order_acquire);
-        ptr.version = 0;
-        while (!head_->compare_exchange_weak(
-                ptr,
-                VersionPtr{ptr.ptr, 1},
+        Node *ptr = head_->load(std::memory_order_acquire);
+        Node *locked_ptr;
+        do {
+            // Expected: unlock, normal pointer value.
+            ptr = (Node *)((uintptr_t)ptr & ~0x01);
+            // Pointer value with the lock tag: set the least significant bit to 1.
+            // Because the Node is aligned at least sizeof(void*), so the Node object address
+            // must be a multiple of 4(on a 32-bits OS) or 8(on a 64-bits OS), so the least
+            // significant bits can be used to save tag value.
+            locked_ptr = (Node *)((uintptr_t)ptr | 0x01);
+        } while (!head_->compare_exchange_weak(
+                ptr, locked_ptr,
                 std::memory_order_acq_rel,
-                std::memory_order_acquire)) {
-            ptr.version = 0;
-        }
+                std::memory_order_acquire));
 
-        auto *next = ptr.ptr->next.load(std::memory_order_acquire);
-        head_->store(VersionPtr{next == nullptr ? ptr.ptr : next, 0}, std::memory_order_release);
+        // When the CAS succeeds, 'ptr' points to the current head node, 'locked_ptr' = 'ptr' | 0x01.
+
+        auto *next = ptr->next.load(std::memory_order_acquire);
+        head_->store(next == nullptr ? ptr : next, std::memory_order_release);
 
         if (next == nullptr) {
             return {};
         }
 
         std::optional<value_type> ret(util::cast_ctor_ref(next->value));
-        release_node(ptr.ptr);
+        release_node(ptr);
         return ret;
     }
 
@@ -179,7 +176,7 @@ private:
     }
 
     // dequeue direction
-    util::CachePadded<std::atomic<VersionPtr>> head_;
+    util::CachePadded<std::atomic<Node *>> head_;
     // enqueue direction
     util::CachePadded<std::atomic<Node *>> tail_;
 
