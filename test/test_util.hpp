@@ -12,13 +12,13 @@
 #include <mutex>
 
 
-constexpr int64_t LoopCount = 10'000'000;
+constexpr uint64_t LoopCount = 10'000'000;
 
 struct Task
 {
     int64_t tid;
     int64_t consume_tid;
-    int64_t task_id;
+    uint64_t task_id;
     int64_t in_time;
     int64_t out_time;
 };

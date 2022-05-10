@@ -32,7 +32,7 @@ void produce(Queue &task_queue, std::atomic_flag &barrier)
     task.tid = (int64_t)*(ThreadIdType *)(&tid);     // hack
     task.out_time = 0;
     task.consume_tid = 0;
-    for (int64_t i = 0; i < LoopCount; ++i) {
+    for (uint64_t i = 0; i < LoopCount; ++i) {
         task.task_id = i;
         task.in_time = get_current_time();
         task_queue.enqueue(task);
@@ -51,8 +51,7 @@ void consume(
         Queue &task_queue,
         std::atomic_flag &barrier,
         std::vector<Task> &result,
-        std::atomic<uint64_t> &counter,
-        uint64_t total)
+        uint64_t count)
 {
     auto tid = std::this_thread::get_id();
 
@@ -62,20 +61,22 @@ void consume(
     auto begin = get_current_time();
 
     auto c_tid = (int64_t)*(ThreadIdType *)(&tid);     // hack
-    while (counter.load(std::memory_order_acquire) != total) {
+    uint64_t i = 0;
+    while (i < count) {
         auto task = task_queue.try_dequeue();
         if (task) {
-            counter.fetch_add(1, std::memory_order_acq_rel);
             task->consume_tid = c_tid;
             task->out_time = get_current_time();
             result.push_back(*task);
+
+            ++i;
         }
     }
 
     auto end = get_current_time();
     auto elapsed = end - begin;
     sync_io([&tid, elapsed] {
-        std::cout << "[Consume] Consumer Thread [" << tid << "] finished. total time: "
+        std::cout << "[Consume] Consumer Thread [" << tid << "] finished. count time: "
                   << elapsed << "ns" << std::endl;
     });
 }

@@ -11,6 +11,9 @@
 #include "queue_thread_run.hpp"
 
 
+constexpr uint32_t ProducerCount = 4;
+constexpr uint32_t ConsumerCount = 2;
+
 template<typename Queue>
 void run()
 {
@@ -20,26 +23,29 @@ void run()
     std::cout << "Queue is lock free: " << std::boolalpha <<
               task_queue.is_lock_free() << std::endl;
 
-    uint64_t total = 4 * LoopCount;
-
     std::vector<std::thread> produce_threads;
-    produce_threads.reserve(4);
-    for (int i = 0; i < 4; ++i) {
+    produce_threads.reserve(ProducerCount);
+    for (uint32_t i = 0; i < ProducerCount; ++i) {
         produce_threads.emplace_back(
                 produce<Queue>,
                 std::ref(task_queue), std::ref(barrier));
     }
+
+    constexpr uint64_t Total = ProducerCount * LoopCount;
+    constexpr uint64_t ConsumerResultSize = Total / ConsumerCount;
+    static_assert(ConsumerResultSize * ConsumerCount == Total);
+
     std::vector<std::thread> consume_threads;
-    consume_threads.reserve(2);
-    std::vector<std::vector<Task>> result(2);
-    result[0].reserve(total / 4 * 3);
-    result[1].reserve(total / 4 * 3);
-    std::atomic<uint64_t> counter(0);
-    for (int i = 0; i < 2; ++i) {
+    consume_threads.reserve(ConsumerCount);
+    std::vector<std::vector<Task>> result(ConsumerCount);
+    for (auto &r: result) {
+        r.reserve(ConsumerResultSize);
+    }
+    for (uint32_t i = 0; i < ConsumerCount; ++i) {
         consume_threads.emplace_back(
                 consume<Queue>,
                 std::ref(task_queue), std::ref(barrier),
-                std::ref(result[i]), std::ref(counter), total);
+                std::ref(result[i]), ConsumerResultSize);
     }
 
     std::this_thread::sleep_for(std::chrono::seconds(2));
@@ -53,9 +59,6 @@ void run()
     for (auto &t: consume_threads) {
         t.join();
     }
-
-    std::cout << "Result1.count = " << result[0].size() << std::endl;
-    std::cout << "Result2.count = " << result[1].size() << std::endl;
 }
 
 int main(int argc, char **argv)
