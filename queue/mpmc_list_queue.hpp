@@ -19,7 +19,7 @@
 
 namespace sc::mpmc {
 
-template<typename T>
+template<typename T, uint32_t PoolSize = 0>
 class LinkedListQueue
 {
     static constexpr size_t PointerSize = sizeof(void *);
@@ -38,13 +38,12 @@ class LinkedListQueue
         }
     };
 
-    /* default size for cache pool */
-    static constexpr uint32_t DefaultPoolSize = 0;
-
 public:
     using value_type = T;
     using reference = value_type &;
     using const_reference = const value_type &;
+
+    static constexpr uint32_t PoolCacheSize = PoolSize;
 
     LinkedListQueue()
     {
@@ -117,13 +116,15 @@ public:
         // When the CAS succeeds, 'ptr' points to the current head node, 'locked_ptr' = 'ptr' | 0x01.
 
         auto *next = ptr->next.load(std::memory_order_acquire);
-        head_->store(next == nullptr ? ptr : next, std::memory_order_release);
-
         if (next == nullptr) {
+            head_->store(ptr, std::memory_order_release);
             return {};
         }
 
+        // retrieve the value before set 'head_' to avoid another thread releases the 'next' node.
         std::optional<value_type> ret(util::cast_ctor_ref(next->value));
+        head_->store(next, std::memory_order_release);
+
         release_node(ptr);
         return ret;
     }
@@ -181,7 +182,7 @@ private:
     util::CachePadded<std::atomic<Node *>> tail_;
 
     // allocator
-    ObjectCachePool<Node, DefaultPoolSize> pool_;
+    ObjectCachePool<Node, PoolSize> pool_;
 };
 
 }
