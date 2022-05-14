@@ -64,7 +64,7 @@ static void produce_single()
     task.tid = 0;
     task.out_time = 0;
     task.consume_tid = 0;
-    for (int64_t i = 0; i < LoopCount; ++i) {
+    for (uint64_t i = 0; i < LoopCount; ++i) {
         task.task_id = i;
         task.in_time = get_current_time();
         qt.enqueue(task);
