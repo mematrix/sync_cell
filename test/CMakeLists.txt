@@ -16,3 +16,8 @@ add_executable(single_produce_test single_produce_test.cpp)
 if (NOT BuildWithMSVC)
     target_link_libraries(single_produce_test pthread)
 endif ()
+
+add_executable(mpsc_list_queue_test mpsc_list_queue_test.cpp)
+if (NOT BuildWithMSVC)
+    target_link_libraries(mpsc_list_queue_test atomic pthread)
+endif ()
